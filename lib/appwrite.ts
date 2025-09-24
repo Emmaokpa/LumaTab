@@ -36,6 +36,7 @@ export interface Wallpaper {
 }
 
 export interface User {
+  aiImagesGenerated: number
   $id: string
   email: string
   name: string
@@ -44,6 +45,9 @@ export interface User {
   totalEarnings: number
   totalSales: number
   createdAt: string
+  subscriptionStatus?: string
+  subscriptionId?: string
+  subscriptionEndDate?: string
 }
 
 export interface Order {
@@ -94,11 +98,18 @@ export const appwriteService = {
     return await databases.getDocument(DATABASE_ID, USERS_COLLECTION_ID, id)
   },
 
-  async createUser(data: Omit<User, "$id" | "createdAt">) {
-    return await databases.createDocument(DATABASE_ID, USERS_COLLECTION_ID, "unique()", {
+  async getUserByEmail(email: string) {
+    const response = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION_ID, [
+      Query.equal("email", email),
+    ]);
+    return response.documents[0];
+  },
+
+  async createUser(id: string, data: Omit<User, "$id" | "createdAt">) {
+    return await databases.createDocument(DATABASE_ID, USERS_COLLECTION_ID, id, {
       ...data,
       createdAt: new Date().toISOString(),
-    })
+    });
   },
 
   async updateUser(id: string, data: Partial<User>) {

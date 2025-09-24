@@ -1,6 +1,6 @@
-"use client"
+'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,12 +8,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Search, Upload, User, ShoppingCart, Play, LogOut, Settings } from "lucide-react"
+import { Search, Upload, User, Play, LogOut, Settings, Star, Sparkles } from "lucide-react"
 import { WallpaperGrid } from "@/components/wallpaper-grid"
 import { AuthModal } from "@/components/auth-modal"
 import { UploadModal } from "@/components/upload-modal"
 import { CheckoutModal } from "@/components/checkout-modal"
 import { DarkModeToggle } from "@/components/dark-mode-toggle"
+import { appwriteService, User as AppwriteUser } from "@/lib/appwrite"
 
 export default function LumaTab() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -21,13 +22,36 @@ export default function LumaTab() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showCheckoutModal, setShowCheckoutModal] = useState(false)
-  const [cartItems, setCartItems] = useState<string[]>([])
+  const [currentUser, setCurrentUser] = useState<AppwriteUser | null>(null)
 
   const { data: session, status } = useSession()
   const isLoggedIn = !!session?.user
+  const isSubscribed = currentUser?.subscriptionStatus === 'active'
 
-  const addToCart = (wallpaperId: string) => {
-    setCartItems((prev) => [...prev, wallpaperId])
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (session?.user?.id) {
+        try {
+          const user = await appwriteService.getUser(session.user.id)
+          setCurrentUser(user as unknown as AppwriteUser)
+        } catch (err) {
+          console.error('Failed to fetch user data:', err)
+          setCurrentUser(null)
+        }
+      } else {
+        setCurrentUser(null)
+      }
+    }
+
+    fetchUser()
+  }, [session])
+
+  const handleSubscribe = () => {
+    if (!isLoggedIn) {
+      setShowAuthModal(true)
+    } else {
+      setShowCheckoutModal(true)
+    }
   }
 
   const handleSignOut = async () => {
@@ -80,26 +104,24 @@ export default function LumaTab() {
                 Upload
               </Button>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowCheckoutModal(true)}
-                className="relative rounded-full"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                {cartItems.length > 0 && (
-                  <Badge className="absolute -top-2 -right-2 w-5 h-5 p-0 flex items-center justify-center bg-pink-500 text-white text-xs rounded-full">
-                    {cartItems.length}
-                  </Badge>
-                )}
-              </Button>
+              {!isSubscribed && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleSubscribe}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Go Pro
+                </Button>
+              )}
 
               {isLoggedIn ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={session.user.image || "/placeholder.svg"} alt={session.user.name} />
+                      <Avatar className="h-8 w-8" suppressHydrationWarning>
+                        <AvatarImage src={session.user.image || "/placeholder.svg"} alt={session.user.name || ""} />
                         <AvatarFallback>{session.user.name?.charAt(0)}</AvatarFallback>
                       </Avatar>
                     </Button>
@@ -111,6 +133,12 @@ export default function LumaTab() {
                         <p className="w-[200px] truncate text-sm text-muted-foreground">{session.user.email}</p>
                       </div>
                     </div>
+                    {isSubscribed && (
+                      <DropdownMenuItem disabled>
+                        <Star className="mr-2 h-4 w-4 text-yellow-500" />
+                        <span>Pro Member</span>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem>
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
@@ -168,28 +196,30 @@ export default function LumaTab() {
         </div>
 
         {/* Featured Section */}
-        <div className="mb-8">
-          <Card className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 border-0 rounded-3xl">
-            <CardContent className="p-8 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Premium Live Wallpapers</h2>
-                  <p className="text-purple-100 mb-4">Discover stunning animated wallpapers from top creators</p>
-                  <Button className="bg-white text-purple-600 hover:bg-purple-50 rounded-full">
-                    <Play className="w-4 h-4 mr-2" />
-                    Explore Premium
-                  </Button>
+        {!isSubscribed && (
+          <div className="mb-8">
+            <Card className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 border-0 rounded-3xl">
+              <CardContent className="p-8 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-2">Unlock LumaTab Pro</h2>
+                    <p className="text-purple-100 mb-4">Access all premium and AI-generated wallpapers instantly.</p>
+                    <Button onClick={handleSubscribe} className="bg-white text-purple-600 hover:bg-purple-50 rounded-full">
+                      <Star className="w-4 h-4 mr-2" />
+                      Upgrade Now
+                    </Button>
+                  </div>
+                  <div className="hidden md:block">
+                    <div className="w-32 h-32 bg-white/20 rounded-3xl backdrop-blur-sm"></div>
+                  </div>
                 </div>
-                <div className="hidden md:block">
-                  <div className="w-32 h-32 bg-white/20 rounded-3xl backdrop-blur-sm"></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Wallpaper Grid */}
-        <WallpaperGrid searchQuery={searchQuery} selectedCategory={selectedCategory} onAddToCart={addToCart} />
+        <WallpaperGrid searchQuery={searchQuery} selectedCategory={selectedCategory} onSubscribe={handleSubscribe} />
       </div>
 
       {/* Modals */}
@@ -200,12 +230,7 @@ export default function LumaTab() {
         isLoggedIn={isLoggedIn}
         onLoginRequired={() => setShowAuthModal(true)}
       />
-      <CheckoutModal
-        open={showCheckoutModal}
-        onOpenChange={setShowCheckoutModal}
-        cartItems={cartItems}
-        onClearCart={() => setCartItems([])}
-      />
+      <CheckoutModal open={showCheckoutModal} onOpenChange={setShowCheckoutModal} />
     </div>
   )
 }

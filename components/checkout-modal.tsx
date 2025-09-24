@@ -4,155 +4,87 @@ import { useSession } from "next-auth/react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { CreditCard, Trash2, Loader2 } from "lucide-react"
+import { CreditCard, Loader2, Rocket } from "lucide-react"
 import { paddleService } from "@/lib/paddle"
 
 interface CheckoutModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  cartItems: string[]
-  onClearCart: () => void
 }
 
-export function CheckoutModal({ open, onOpenChange, cartItems, onClearCart }: CheckoutModalProps) {
+export function CheckoutModal({ open, onOpenChange }: CheckoutModalProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { data: session } = useSession()
 
-  // Mock cart data - in real app, fetch from Appwrite
-  const cartWallpapers = [
-    { id: "1", title: "Sunset Paradise", price: 2.99, image: "/sunset-wallpaper.jpg" },
-    { id: "4", title: "Space Nebula", price: 3.99, image: "/space-nebula.png" },
-  ]
-
-  const subtotal = cartWallpapers.reduce((sum, item) => sum + item.price, 0)
-  const tax = subtotal * 0.08
-  const total = subtotal + tax
+  const subscriptionPriceId = process.env.NEXT_PUBLIC_PADDLE_PRICE_ID!;
 
   useEffect(() => {
-    // Listen for Paddle events
-    const handlePaymentSuccess = (event: any) => {
-      console.log("[v0] Payment successful:", event.detail)
-      setIsProcessing(false)
-      onClearCart()
-      onOpenChange(false)
-      // Show success message or redirect
-    }
-
-    const handlePaymentError = (event: any) => {
-      console.log("[v0] Payment error:", event.detail)
-      setIsProcessing(false)
-      setError("Payment failed. Please try again.")
-    }
+    const handlePaymentSuccess = () => {
+      setIsProcessing(false);
+      onOpenChange(false);
+      // Optionally, show a global success message here
+      // For now, we rely on the webhook to update the user's status
+    };
 
     const handleCheckoutClose = () => {
-      setIsProcessing(false)
-    }
+      setIsProcessing(false);
+    };
 
-    window.addEventListener("paddle:payment:success", handlePaymentSuccess)
-    window.addEventListener("paddle:payment:error", handlePaymentError)
-    window.addEventListener("paddle:checkout:close", handleCheckoutClose)
+    window.addEventListener("paddle:checkout:completed", handlePaymentSuccess);
+    window.addEventListener("paddle:checkout:close", handleCheckoutClose);
 
     return () => {
-      window.removeEventListener("paddle:payment:success", handlePaymentSuccess)
-      window.removeEventListener("paddle:payment:error", handlePaymentError)
-      window.removeEventListener("paddle:checkout:close", handleCheckoutClose)
-    }
-  }, [onClearCart, onOpenChange])
+      window.removeEventListener("paddle:checkout:completed", handlePaymentSuccess);
+      window.removeEventListener("paddle:checkout:close", handleCheckoutClose);
+    };
+  }, [onOpenChange]);
 
-  const handleCheckout = async () => {
-    if (!session?.user) {
-      setError("Please sign in to complete your purchase")
-      return
+  const handleSubscribe = async () => {
+    if (!session?.user?.email) {
+      setError("Please sign in to subscribe.");
+      return;
     }
 
     try {
-      setIsProcessing(true)
-      setError(null)
-
-      const orderResponse = await paddleService.createOrder(cartItems, session.user.email!)
+      setIsProcessing(true);
+      setError(null);
 
       await paddleService.openCheckout({
-        items: orderResponse.items,
+        items: [{ priceId: subscriptionPriceId, quantity: 1 }],
         customer: {
-          email: session.user.email!,
+          email: session.user.email,
         },
         customData: {
-          orderId: orderResponse.orderId,
-          userId: session.user.id,
-        },
-      })
+            userId: session.user.id,
+        }
+      });
     } catch (err) {
-      setIsProcessing(false)
-      setError(err instanceof Error ? err.message : "Failed to process checkout")
+      setIsProcessing(false);
+      setError(err instanceof Error ? err.message : "Failed to open checkout.");
     }
-  }
-
-  if (cartItems.length === 0) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Your Cart</DialogTitle>
-          </DialogHeader>
-          <div className="text-center py-8">
-            <p className="text-muted-foreground mb-4">Your cart is empty</p>
-            <Button onClick={() => onOpenChange(false)}>Continue Shopping</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    )
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
-            <CreditCard className="w-5 h-5 text-purple-500" />
-            <span>Checkout</span>
+            <Rocket className="w-5 h-5 text-purple-500" />
+            <span>Go Pro</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Cart Items */}
-          <div className="space-y-4">
-            <h3 className="font-semibold">Order Summary</h3>
-            {cartWallpapers.map((item) => (
-              <div key={item.id} className="flex items-center space-x-3">
-                <img
-                  src={item.image || "/placeholder.svg"}
-                  alt={item.title}
-                  className="w-16 h-12 object-cover rounded"
-                />
-                <div className="flex-1">
-                  <p className="font-medium text-sm">{item.title}</p>
-                  <p className="text-sm text-muted-foreground">${item.price}</p>
-                </div>
-                <Button variant="ghost" size="sm">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
+        <div className="space-y-6 py-4">
+            <div className="text-center">
+                <h3 className="text-xl font-bold">LumaTab Pro</h3>
+                <p className="text-muted-foreground">Unlock all premium and AI-generated wallpapers.</p>
+            </div>
 
           <Separator />
 
-          {/* Pricing */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Tax</span>
-              <span>${tax.toFixed(2)}</span>
-            </div>
-            <Separator />
-            <div className="flex justify-between font-semibold">
-              <span>Total</span>
-              <span>${total.toFixed(2)}</span>
-            </div>
+          <div className="text-center">
+            <p className="text-4xl font-bold">$5<span className="text-lg font-normal text-muted-foreground">/month</span></p>
           </div>
 
           {error && (
@@ -162,7 +94,7 @@ export function CheckoutModal({ open, onOpenChange, cartItems, onClearCart }: Ch
           )}
 
           <Button
-            onClick={handleCheckout}
+            onClick={handleSubscribe}
             className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
             disabled={isProcessing}
           >
@@ -172,12 +104,15 @@ export function CheckoutModal({ open, onOpenChange, cartItems, onClearCart }: Ch
                 Processing...
               </>
             ) : (
-              `Pay $${total.toFixed(2)} with Paddle`
+              <>
+                <CreditCard className="w-4 h-4 mr-2" />
+                Subscribe Now
+              </>
             )}
           </Button>
 
           <p className="text-xs text-center text-muted-foreground">
-            Secure payment powered by Paddle. Your payment information is encrypted and secure.
+            Secure payment powered by Paddle.
           </p>
         </div>
       </DialogContent>
